@@ -1,0 +1,13 @@
+[package]
+name = "wl-inject"
+version = "0.1.0"
+edition = "2021"
+description = "Persistent virtual pointer + keyboard injector for headless Wayland compositor testing"
+
+[dependencies]
+wayland-client = "0.31"
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+wayland-protocols-misc = { version = "0.3", features = ["client"] }
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
+xkbcommon = "0.8"
+rustix = { version = "1", features = ["fs", "mm"] }
