@@ -268,6 +268,21 @@ fn char_to_evdev(c: char) -> Option<(u32, bool)> {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 {
+        match args[1].as_str() {
+            "-v" | "--version" | "version" => {
+                println!("wl-inject {}", env!("CARGO_PKG_VERSION"));
+                return;
+            }
+            "-h" | "--help" | "help" => {
+                println!("wl-inject {}\nPersistent virtual pointer + keyboard injector for headless Wayland compositor testing.\n\nCommands read from stdin:\n  move <dx> <dy>\n  drag <dx> <dy> [btn] [steps] [ms]\n  click [btn]\n  down [btn]\n  up [btn]\n  scroll <dy> <dx>\n  key <name> <0|1>\n  press <name>\n  release <name>\n  tap <name> [hold_ms]\n  type <text>\n  sleep <ms>\n  quit", env!("CARGO_PKG_VERSION"));
+                return;
+            }
+            _ => {}
+        }
+    }
+
     let conn = Connection::connect_to_env().expect("connect to WAYLAND_DISPLAY");
     let display = conn.display();
     let mut event_queue = conn.new_event_queue();
