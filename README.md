@@ -32,17 +32,22 @@ Needs `libwayland-client.so` and `libxkbcommon.so` at runtime (present on basica
 Point `WAYLAND_DISPLAY` at whatever compositor you want to inject into (a real session, or a headless one — see "Headless testing recipe" below), then feed it newline-separated commands on stdin:
 
 ```
-move <dx> <dy>       relative pointer motion, in pixels
-down [0|1|2]         press a mouse button and hold it (0=left/default, 1=right, 2=middle)
-up [0|1|2]           release a mouse button
-click [0|1|2]        press + release in one shot
-scroll <dy> <dx>      scroll wheel/trackpad axis values (vertical, horizontal)
-key <name> [0|1]     press (default / 1) or release (0) a key by name
-sleep <ms>           pause between commands (useful for letting a drag register across frames)
-quit                 close the connection and exit
+move <dx> <dy>                  relative pointer motion, in pixels
+drag <dx> <dy> [btn] [steps] [ms] smooth mouse drag with button held over multiple steps
+down [0|1|2]                    press a mouse button and hold it (0=left/default, 1=right, 2=middle)
+up [0|1|2]                      release a mouse button
+click [0|1|2]                   press + release in one shot
+scroll <dy> <dx>                 scroll wheel/trackpad axis values (vertical, horizontal)
+key <name> [0|1]                press (default / 1) or release (0) a key by name
+press <name>                    alias for 'key <name> 1'
+release <name>                  alias for 'key <name> 0'
+tap <name> [hold_ms]            press, wait (default 40ms), and release a key
+type <text>                     type a full ASCII string with automatic Shift handling
+sleep <ms>                      pause between commands (useful for letting a drag register across frames)
+quit                            close the connection and exit
 ```
 
-Known key `<name>`s: `esc`/`escape`, `space`, `ctrl`/`leftctrl`/`control`, `rightctrl`, `shift`/`leftshift`, `rightshift`, `alt`/`leftalt`, `tab`, `enter`/`return`, `up`, `down`, `left`, `right`, `w`, `a`, `s`, `d`. Add more to the `evdev_keycode` match in `src/main.rs` as needed — they're plain Linux evdev codes from `input-event-codes.h`, not Bevy/winit `KeyCode` names.
+Known key `<name>`s: `esc`/`escape`, `space`, `ctrl`/`leftctrl`/`control`, `rightctrl`, `shift`/`leftshift`, `rightshift`, `alt`/`leftalt`, `tab`, `enter`/`return`, `up`, `down`, `left`, `right`, `w`, `a`, `s`, `d`, `del`/`delete`, `console`/`tilde`/`~`/`grave`/`` ` ``. Add more to the `evdev_keycode` match in `src/main.rs` as needed — they're plain Linux evdev codes from `input-event-codes.h`, not Bevy/winit `KeyCode` names.
 
 ### Driving it from a shell script
 

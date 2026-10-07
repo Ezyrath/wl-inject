@@ -152,7 +152,7 @@ fn evdev_keycode(name: &str) -> Option<u32> {
         "l" => 38,
         "semicolon" | ";" => 39,
         "apostrophe" | "'" => 40,
-        "grave" | "`" => 41,
+        "console" | "tilde" | "~" | "grave" | "`" => 41,
         "shift" | "leftshift" => 42,
         "backslash" | "\\" => 43,
         "z" => 44,
@@ -210,9 +210,61 @@ fn evdev_keycode(name: &str) -> Option<u32> {
         "down" => 108,
         "pagedown" => 109,
         "insert" => 110,
-        "delete" => 111,
+        "del" | "delete" => 111,
         _ => return None,
     })
+}
+
+/// Converts a printable ASCII character into an evdev keycode and shift requirement.
+fn char_to_evdev(c: char) -> Option<(u32, bool)> {
+    match c {
+        'a'..='z' => {
+            let s = c.to_string();
+            evdev_keycode(&s).map(|code| (code, false))
+        }
+        'A'..='Z' => {
+            let s = c.to_ascii_lowercase().to_string();
+            evdev_keycode(&s).map(|code| (code, true))
+        }
+        '1'..='9' => Some((c as u32 - '1' as u32 + 2, false)),
+        '0' => Some((11, false)),
+        '!' => Some((2, true)),
+        '@' => Some((3, true)),
+        '#' => Some((4, true)),
+        '$' => Some((5, true)),
+        '%' => Some((6, true)),
+        '^' => Some((7, true)),
+        '&' => Some((8, true)),
+        '*' => Some((9, true)),
+        '(' => Some((10, true)),
+        ')' => Some((11, true)),
+        '-' => Some((12, false)),
+        '_' => Some((12, true)),
+        '=' => Some((13, false)),
+        '+' => Some((13, true)),
+        '\t' => Some((15, false)),
+        '\n' => Some((28, false)),
+        '[' => Some((26, false)),
+        '{' => Some((26, true)),
+        ']' => Some((27, false)),
+        '}' => Some((27, true)),
+        ';' => Some((39, false)),
+        ':' => Some((39, true)),
+        '\'' => Some((40, false)),
+        '"' => Some((40, true)),
+        '`' => Some((41, false)),
+        '~' => Some((41, true)),
+        '\\' => Some((43, false)),
+        '|' => Some((43, true)),
+        ',' => Some((51, false)),
+        '<' => Some((51, true)),
+        '.' => Some((52, false)),
+        '>' => Some((52, true)),
+        '/' => Some((53, false)),
+        '?' => Some((53, true)),
+        ' ' => Some((57, false)),
+        _ => None,
+    }
 }
 
 fn main() {
@@ -238,7 +290,7 @@ fn main() {
     event_queue.roundtrip(&mut state).unwrap();
 
     eprintln!("wl-inject: persistent virtual pointer + keyboard ready, reading commands from stdin");
-    eprintln!("commands: move <dx> <dy> | down/up/click [0|1|2] | scroll <dy> <dx> | key <name> <0|1> | sleep <ms> | quit");
+    eprintln!("commands: move <dx> <dy> | drag <dx> <dy> [btn] [steps] [ms] | down/up/click [0|1|2] | scroll <dy> <dx> | key <name> <0|1> | press/release/tap <name> | type <text> | sleep <ms> | quit");
 
     let stdin = std::io::stdin();
     for line in stdin.lock().lines() {
@@ -298,6 +350,86 @@ fn main() {
                     Some("0") => keyboard.key(now_ms(), code, wayland_client::protocol::wl_keyboard::KeyState::Released.into()),
                     _ => keyboard.key(now_ms(), code, wayland_client::protocol::wl_keyboard::KeyState::Pressed.into()),
                 }
+            }
+            "press" => {
+                let Some(name) = parts.get(1) else {
+                    eprintln!("press: missing key name");
+                    continue;
+                };
+                let Some(code) = evdev_keycode(name) else {
+                    eprintln!("press: unknown key name '{name}'");
+                    continue;
+                };
+                keyboard.key(now_ms(), code, wayland_client::protocol::wl_keyboard::KeyState::Pressed.into());
+            }
+            "release" => {
+                let Some(name) = parts.get(1) else {
+                    eprintln!("release: missing key name");
+                    continue;
+                };
+                let Some(code) = evdev_keycode(name) else {
+                    eprintln!("release: unknown key name '{name}'");
+                    continue;
+                };
+                keyboard.key(now_ms(), code, wayland_client::protocol::wl_keyboard::KeyState::Released.into());
+            }
+            "tap" => {
+                let Some(name) = parts.get(1) else {
+                    eprintln!("tap: missing key name");
+                    continue;
+                };
+                let Some(code) = evdev_keycode(name) else {
+                    eprintln!("tap: unknown key name '{name}'");
+                    continue;
+                };
+                let hold_ms: u64 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(40);
+                keyboard.key(now_ms(), code, wayland_client::protocol::wl_keyboard::KeyState::Pressed.into());
+                conn.flush().unwrap();
+                std::thread::sleep(std::time::Duration::from_millis(hold_ms));
+                keyboard.key(now_ms(), code, wayland_client::protocol::wl_keyboard::KeyState::Released.into());
+            }
+            "type" => {
+                let text = line.trim()["type".len()..].trim_start();
+                for c in text.chars() {
+                    if let Some((code, shifted)) = char_to_evdev(c) {
+                        if shifted {
+                            keyboard.key(now_ms(), 42, wayland_client::protocol::wl_keyboard::KeyState::Pressed.into());
+                        }
+                        keyboard.key(now_ms(), code, wayland_client::protocol::wl_keyboard::KeyState::Pressed.into());
+                        conn.flush().unwrap();
+                        std::thread::sleep(std::time::Duration::from_millis(15));
+                        keyboard.key(now_ms(), code, wayland_client::protocol::wl_keyboard::KeyState::Released.into());
+                        if shifted {
+                            keyboard.key(now_ms(), 42, wayland_client::protocol::wl_keyboard::KeyState::Released.into());
+                        }
+                        conn.flush().unwrap();
+                        std::thread::sleep(std::time::Duration::from_millis(15));
+                    }
+                }
+            }
+            "drag" => {
+                let dx: f64 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                let dy: f64 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                let btn = mouse_button(parts.get(3).copied());
+                let steps: usize = parts.get(4).and_then(|s| s.parse().ok()).unwrap_or(10).max(1);
+                let step_ms: u64 = parts.get(5).and_then(|s| s.parse().ok()).unwrap_or(15);
+
+                pointer.button(now_ms(), btn, wayland_client::protocol::wl_pointer::ButtonState::Pressed);
+                pointer.frame();
+                conn.flush().unwrap();
+                std::thread::sleep(std::time::Duration::from_millis(step_ms));
+
+                let step_dx = dx / steps as f64;
+                let step_dy = dy / steps as f64;
+                for _ in 0..steps {
+                    pointer.motion(now_ms(), step_dx, step_dy);
+                    pointer.frame();
+                    conn.flush().unwrap();
+                    std::thread::sleep(std::time::Duration::from_millis(step_ms));
+                }
+
+                pointer.button(now_ms(), btn, wayland_client::protocol::wl_pointer::ButtonState::Released);
+                pointer.frame();
             }
             "sleep" => {
                 let ms: u64 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(100);
